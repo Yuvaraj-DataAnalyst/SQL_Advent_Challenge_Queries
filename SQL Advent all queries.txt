@@ -1,0 +1,231 @@
+SQL Advent all queries
+
+1.Every year, the city of Whoville conducts a Reindeer Run to find the best reindeers for Santa's Sleigh. Can you write a query to return the name and rank of the top 7 reindeers in this race?
+
+Ans - 
+select  name,rank from reindeer_run_results
+order by rank ASC 
+limit 7
+
+2.Santa wants to analyze which toys that were produced in his workshop have already been delivered to children. You are given two tables on toy production and toy delivery — can you return the toy ID and toy name of the toys that have been delivered?
+
+select tp.toy_id,tp.toy_name from 
+  toy_production tp  join  toy_delivery td on tp.toy_id=td.toy_id
+
+3.The Grinch has brainstormed a ton of pranks for Whoville, but he only wants to keep the top prank per target, with the highest evilness score. Return the most evil prank for each target. If two pranks have the same evilness, the more recently brainstormed wins.
+
+with prankrank as (
+select target_name,evilness_score,created_at ,
+rank() over( partition by target_name order by evilness_score desc,created_at desc) as targets
+from grinch_prank_ideas
+
+)
+select target_name,evilness_score
+from prankrank 
+where targets=1
+
+4.Kevin's trying to decorate the house without sending the electricity bill through the roof. Write a query to find the top 5 most energy-efficient decorations (i.e. lowest cost per hour to operate).
+select decoration_name,energy_cost_per_hour
+from hall_decorations
+order by energy_cost_per_hour asc 
+  limiT 5
+
+5.Some elves took time off after the holiday rush, but not everyone has returned to work. List all elves by name, showing their return date. If they have not returned from vacation, list their return date as "Still resting".
+
+select e.elf_name, case when v.return_date is null then 'Still resting' else v.return_date end as retur_date
+from elves e left join vacations v 
+on e.elf_id = v.elf_id
+order by e.elf_id asc 
+
+6.Buddy is planning a winter getaway and wants to rank ski resorts by annual snowfall. Can you help him bucket these ski resorts into quartiles?
+WITH AnnualSnowfall AS (
+    SELECT 
+        resort_id,
+        resort_name,
+        SUM(snowfall_inches) AS total_snowfall
+    FROM resort_monthly_snowfall
+    GROUP BY resort_id, resort_name
+)
+SELECT 
+    resort_id,
+    resort_name,
+    total_snowfall,
+    NTILE(4) OVER (ORDER BY total_snowfall DESC) AS quartile
+FROM AnnualSnowfall
+ORDER BY quartile, total_snowfall DESC;
+
+7.Frosty wants to know how many unique snowflake types were recorded on the December 24th, 2025 storm. Can you help him?
+SELECT COUNT(DISTINCT flake_type) AS unique_flake_types
+FROM snowfall_log
+WHERE CAST(fall_time AS DATE) = '2025-12-24';
+
+8.Mrs. Claus is organizing the holiday storage room and wants a single list of all decorations — both Christmas trees and light sets. Write a query that combines both tables and includes each item's name and category.
+
+select * from storage_trees 
+union all
+select * from storage_lights
+
+9.The elves are testing new tinsel–light combinations to find the next big holiday trend. Write a query to generate every possible pairing of tinsel colors and light colors, include in your output a column that combines the two values separated with a dash ("-").
+
+SELECT 
+    l.*, 
+    t.*, 
+    CONCAT(l.color_name, '-', t.color_name) AS fulla
+FROM light_colors l
+CROSS JOIN tinsel_colors t;
+
+10.In the holiday cookie factory, workers are measuring how efficient each oven is. Can you find the average baking time per oven rounded to one decimal place?
+
+select  oven_id, round(avg(baking_time_minutes),1) as avg_time
+from cookie_batches
+group by  oven_id
+order by oven_id
+
+11.At the winter market, Cindy Lou is browsing the clothing inventory and wants to find all items with "sweater" in their name. But the challenge is the color and item columns have inconsistent capitalization. Can you write a query to return only the sweater names and their cleaned-up colors.
+SELECT
+    item_name,
+    UPPER(SUBSTR(color, 1, 1)) || LOWER(SUBSTR(color, 2)) AS clean_color
+FROM winter_clothing
+WHERE LOWER(item_name) LIKE '%sweater%';
+
+12.The North Pole Network wants to see who's the most active in the holiday chat each day. Write a query to count how many messages each user sent, then find the most active user(s) each day. If multiple users tie for first place, return all of them.
+WITH daily_counts AS (
+    SELECT
+        CAST(nm.sent_at AS DATE) AS msg_date,
+        nu.user_id,
+        nu.user_name,
+        COUNT(nm.message_id) AS msg_count
+    FROM npn_messages nm
+    JOIN npn_users nu
+        ON nm.sender_id = nu.user_id
+    GROUP BY
+        CAST(nm.sent_at AS DATE),
+        nu.user_id,
+        nu.user_name
+),
+ranked_users AS (
+    SELECT
+        msg_date,
+        user_id,
+        user_name,
+        msg_count,
+        RANK() OVER (
+            PARTITION BY msg_date
+            ORDER BY msg_count DESC
+        ) AS rnk
+    FROM daily_counts
+)
+SELECT
+    msg_date,
+    user_id,
+    user_name,
+    msg_count
+FROM ranked_users
+WHERE rnk = 1
+ORDER BY msg_date, user_id;
+
+13.Santa's audit team is reviewing this year's behavior scores to find the extremes — write a query to return the lowest and highest scores recorded on the Naughty or Nice list.
+SELECT
+    MIN(behavior_score) AS lowest_score,
+    MAX(behavior_score) AS highest_score
+FROM behavior_scores;
+
+14.The Productivity Club is tracking members' challenge start dates and wants to calculate each member's focus_end_date, exactly 14 days after their start date. Can you write a query to return the existing table with the focus_end_date column?
+
+SELECT *,
+       DATE(start_date, '+14 days') AS focus_end_date
+FROM focus_challenges;
+
+15.The Grinch is tracking his daily mischief scores to see how his behavior changes over time. Can you find how many points his score increased or decreased each day compared to the previous day?
+SELECT
+    log_date,
+    mischief_score,
+    LAG(mischief_score) OVER (ORDER BY log_date)                    AS previous_score,
+    mischief_score
+        - LAG(mischief_score) OVER (ORDER BY log_date)              AS diff
+FROM grinch_mischief_log
+ORDER BY log_date;
+
+16.It's a snow day, and Buddy is deciding which tasks he can do from under a blanket. Can you find all tasks that are either marked as 'Work From Home' or 'Low Priority' so he can stay cozy and productive?
+select * from daily_tasks
+where task_type = 'Work From Home' or
+  priority = 'Low'
+
+17.During a quiet evening of reflection, Cindy Lou wants to categorize her tasks based on how peaceful they are. Can you write a query that adds a new column classifying each task as 'Calm' if its noise_level is below 50, and 'Chaotic' otherwise?
+select *,
+  case when noise_level < 50 then 'Calm' else 'Chaotic' end as status
+from 
+  evening_tasks
+
+18.Over the 12 days of her data challenge, Data Dawn tracked her daily quiz scores across different subjects. Can you find each subject's first and last recorded score to see how much she improved?
+
+SELECT DISTINCT
+    subject,
+    FIRST_VALUE(score) OVER (
+        PARTITION BY subject
+        ORDER BY quiz_date
+    ) AS first_score,
+    LAST_VALUE(score) OVER (
+        PARTITION BY subject
+        ORDER BY quiz_date
+        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+    ) AS last_score,
+    LAST_VALUE(score) OVER (
+        PARTITION BY subject
+        ORDER BY quiz_date
+        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+    )
+    -
+    FIRST_VALUE(score) OVER (
+        PARTITION BY subject
+        ORDER BY quiz_date
+    ) AS improvement
+FROM daily_quiz_scores;
+
+19.Clara is reviewing holiday orders to uncover hidden patterns — can you return the total amount of wrapping paper used for orders that were both gift-wrapped and successfully delivered?
+SELECT 
+    SUM(paper_used_meters) AS total_paper_used
+FROM holiday_orders
+WHERE gift_wrap = 1          -- TRUE / gift-wrapped
+  AND delivery_status = 'Delivered';
+
+20.Jack Frost wants to review all the cocoa breaks he actually took — including the cocoa type and the location he drank it in. How would you combine the necessary tables to show each logged break with its matching cocoa details and location?
+
+SELECT
+    cl.log_id,
+    cl.break_id,
+    ct.cocoa_name,
+    l.location_name
+FROM cocoa_logs cl
+JOIN cocoa_types ct ON cl.cocoa_id = ct.cocoa_id
+JOIN break_schedule bs ON cl.break_id = bs.break_id
+JOIN locations l ON bs.location_id = l.location_id;
+
+21.The Snow Queen hosts nightly fireside chats and records how many stories she tells each evening. Can you calculate the running total of stories she has shared over time, in the order they were told?
+
+select log_date,
+sum(stories_shared) over(order by log_date) as runningsum
+
+from story_log
+order by log_date asc
+
+22.The penguins are signing up for a community sleigh ride, but the organizers need a list of everyone who did NOT choose the "Evening Ride." How would you return all penguins whose selected time is not the evening slot?
+
+SELECT
+    signup_id,
+    penguin_name,
+    ride_time
+FROM sleigh_ride_signups
+WHERE ride_time <> 'Evening';
+
+23.The Gingerbread House Competition wants to feature the top 3 builders who used the most distinct candy types in their designs. How would you find the builders with the highest count of unique candies, and return only the top three?
+
+select builder_name from gingerbread_designs
+group by builder_name
+having  count(distinct candy_type) >= 4
+
+
+24.As the New Year begins, the goals tracker team wants to understand how user types differ. How many completed goals does the average user have in each user_type?
+
+As the New Year begins, the goals tracker team wants to understand how user types differ. How many completed goals does the average user have in each user_type?
+
